@@ -1,2 +1,15 @@
-mcp
-pillow>=9.0.0 
+# Interactive Feedback MCP 依赖包
+# MCP 服务器框架
+fastmcp>=2.0.0
+
+# GUI 界面框架
+PySide6>=6.8.2.1
+
+# 系统进程管理
+psutil>=7.0.0
+
+# 图像处理
+pillow>=9.0.0
+
+# 标准库依赖（通常已包含在 Python 中，此处仅作说明）
+# json, os, sys, subprocess, tempfile, pathlib, threading, hashlib, argparse 
