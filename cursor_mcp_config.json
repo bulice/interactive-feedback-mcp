@@ -1,0 +1,12 @@
+{
+    "mcpServers": {
+        "interactive-feedback-mcp": {
+            "command": "/Users/lee/tmp/interactive-feedback-mcp/mcp_server.sh",
+            "args": [],
+            "timeout": 600,
+            "autoApprove": [
+                "interactive_feedback"
+            ]
+        }
+    }
+}
