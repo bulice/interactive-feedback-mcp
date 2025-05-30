@@ -14,7 +14,7 @@ from typing import Optional, TypedDict
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QCheckBox, QTextEdit, QGroupBox,
-    QFileDialog, QScrollArea
+    QFileDialog, QScrollArea, QSplitter
 )
 from PySide6.QtCore import Qt, Signal, QObject, QTimer, QSettings
 from PySide6.QtGui import QTextCursor, QIcon, QKeyEvent, QFont, QFontDatabase, QPalette, QColor, QPixmap
@@ -264,6 +264,8 @@ def get_user_environment() -> dict[str, str]:
 class FeedbackTextEdit(QTextEdit):
     def __init__(self, parent=None):
         super().__init__(parent)
+        # 启用鼠标滚轮事件
+        self.setFocusPolicy(Qt.WheelFocus)
 
     def keyPressEvent(self, event: QKeyEvent):
         if event.key() == Qt.Key_Return and event.modifiers() == Qt.ControlModifier:
@@ -275,6 +277,13 @@ class FeedbackTextEdit(QTextEdit):
                 parent._submit_feedback()
         else:
             super().keyPressEvent(event)
+    
+    def wheelEvent(self, event):
+        """确保鼠标滚轮事件正确处理"""
+        # 调用父类的滚轮事件处理
+        super().wheelEvent(event)
+        # 确保事件被接受
+        event.accept()
 
 class LogSignals(QObject):
     append_log = Signal(str)
@@ -300,7 +309,16 @@ class FeedbackUI(QMainWindow):
         script_dir = os.path.dirname(os.path.abspath(__file__))
         icon_path = os.path.join(script_dir, "images", "feedback.png")
         self.setWindowIcon(QIcon(icon_path))
-        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
+        
+        # 根据操作系统设置不同的窗口标志
+        if sys.platform == "darwin":  # macOS
+            # 在 macOS 上使用正常的窗口标志，不强制置顶
+            # 允许正常的最小化、最大化和焦点管理
+            self.setWindowFlags(Qt.Window | Qt.WindowTitleHint | Qt.WindowCloseButtonHint | 
+                              Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint)
+        else:
+            # 在其他系统上保持置顶行为（如果需要的话）
+            self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
         
         self.settings = QSettings("InteractiveFeedbackMCP", "InteractiveFeedbackMCP")
         
@@ -318,6 +336,9 @@ class FeedbackUI(QMainWindow):
         state = self.settings.value("windowState")
         if state:
             self.restoreState(state)
+        
+        # 加载置顶设置
+        self.stay_on_top_enabled = self.settings.value("stayOnTop", False, type=bool)
         self.settings.endGroup() # End "MainWindow_General" group
         
         # Load project-specific settings (command, auto-execute, command section visibility)
@@ -343,6 +364,11 @@ class FeedbackUI(QMainWindow):
             self.toggle_command_button.setText("📁 AI工作完成汇报")
 
         set_dark_title_bar(self, True)
+
+        # 应用置顶设置
+        if self.stay_on_top_enabled:
+            self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
+            self.show()
 
         if self.config.get("execute_automatically", False):
             self._run_command()
@@ -446,7 +472,6 @@ class FeedbackUI(QMainWindow):
                 border-color: #0e639c;
             }
             QCheckBox::indicator:checked::before {
-                content: "✓";
                 color: white;
                 font-weight: bold;
                 font-size: 12px;
@@ -459,6 +484,64 @@ class FeedbackUI(QMainWindow):
                 border: 2px dashed #606063;
                 border-radius: 8px;
                 background-color: #3c3c3f;
+            }
+            QScrollBar:vertical {
+                background-color: #404043;
+                width: 12px;
+                border-radius: 6px;
+                margin: 0px;
+            }
+            QScrollBar::handle:vertical {
+                background-color: #606063;
+                border-radius: 6px;
+                min-height: 20px;
+                margin: 2px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background-color: #707073;
+            }
+            QScrollBar::handle:vertical:pressed {
+                background-color: #808083;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                border: none;
+                background: none;
+                height: 0px;
+            }
+            QScrollBar:horizontal {
+                background-color: #404043;
+                height: 12px;
+                border-radius: 6px;
+                margin: 0px;
+            }
+            QScrollBar::handle:horizontal {
+                background-color: #606063;
+                border-radius: 6px;
+                min-width: 20px;
+                margin: 2px;
+            }
+            QScrollBar::handle:horizontal:hover {
+                background-color: #707073;
+            }
+            QScrollBar::handle:horizontal:pressed {
+                background-color: #808083;
+            }
+            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+                border: none;
+                background: none;
+                width: 0px;
+            }
+            QSplitter::handle:vertical {
+                background-color: #606063;
+                height: 3px;
+                border-radius: 1px;
+                margin: 1px 2px;
+            }
+            QSplitter::handle:vertical:hover {
+                background-color: #707073;
+            }
+            QSplitter::handle:vertical:pressed {
+                background-color: #808083;
             }
         """
 
@@ -545,7 +628,6 @@ class FeedbackUI(QMainWindow):
                 border-color: #0d6efd;
             }
             QCheckBox::indicator:checked::before {
-                content: "✓";
                 color: white;
                 font-weight: bold;
                 font-size: 12px;
@@ -558,6 +640,64 @@ class FeedbackUI(QMainWindow):
                 border: 2px dashed #adb5bd;
                 border-radius: 8px;
                 background-color: #f8f9fa;
+            }
+            QScrollBar:vertical {
+                background-color: #e9ecef;
+                width: 12px;
+                border-radius: 6px;
+                margin: 0px;
+            }
+            QScrollBar::handle:vertical {
+                background-color: #adb5bd;
+                border-radius: 6px;
+                min-height: 20px;
+                margin: 2px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background-color: #6c757d;
+            }
+            QScrollBar::handle:vertical:pressed {
+                background-color: #495057;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                border: none;
+                background: none;
+                height: 0px;
+            }
+            QScrollBar:horizontal {
+                background-color: #e9ecef;
+                height: 12px;
+                border-radius: 6px;
+                margin: 0px;
+            }
+            QScrollBar::handle:horizontal {
+                background-color: #adb5bd;
+                border-radius: 6px;
+                min-width: 20px;
+                margin: 2px;
+            }
+            QScrollBar::handle:horizontal:hover {
+                background-color: #6c757d;
+            }
+            QScrollBar::handle:horizontal:pressed {
+                background-color: #495057;
+            }
+            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+                border: none;
+                background: none;
+                width: 0px;
+            }
+            QSplitter::handle:vertical {
+                background-color: #adb5bd;
+                height: 3px;
+                border-radius: 1px;
+                margin: 1px 2px;
+            }
+            QSplitter::handle:vertical:hover {
+                background-color: #6c757d;
+            }
+            QSplitter::handle:vertical:pressed {
+                background-color: #495057;
             }
         """
 
@@ -793,9 +933,15 @@ class FeedbackUI(QMainWindow):
             """
         title_text.setStyleSheet(title_style)
         
+        # 窗口置顶选项
+        self.stay_on_top_check = QCheckBox("📌 窗口置顶")
+        self.stay_on_top_check.setChecked(self.stay_on_top_enabled)
+        self.stay_on_top_check.stateChanged.connect(self._toggle_stay_on_top)
+        
         title_layout.addWidget(title_icon)
         title_layout.addWidget(title_text)
         title_layout.addStretch()
+        title_layout.addWidget(self.stay_on_top_check)
         layout.addWidget(title_widget)
 
         # Toggle Command Section Button
@@ -874,31 +1020,98 @@ class FeedbackUI(QMainWindow):
         self.command_group.setVisible(False) 
         layout.addWidget(self.command_group)
 
-        # Feedback section with adjusted height
-        self.feedback_group = QGroupBox("💬 您的文字反馈（可选）")
-        feedback_layout = QVBoxLayout(self.feedback_group)
-        feedback_layout.setSpacing(12)
+        # Feedback section with adjustable splitter
+        self.feedback_group = QGroupBox("💬 反馈区域")
+        feedback_main_layout = QVBoxLayout(self.feedback_group)
+        feedback_main_layout.setSpacing(12)
 
-        # Short description label (from self.prompt)
-        self.description_label = QLabel(self.prompt)
-        self.description_label.setWordWrap(True)
-        self.description_label.setStyleSheet(self._get_themed_button_style('description'))
-        feedback_layout.addWidget(self.description_label)
+        # 创建垂直分割器
+        self.feedback_splitter = QSplitter(Qt.Vertical)
+        
+        # 上半部分：AI 工作汇报区域
+        self.description_widget = QWidget()
+        description_layout = QVBoxLayout(self.description_widget)
+        description_layout.setContentsMargins(5, 5, 5, 5)
+        
+        description_title = QLabel("📋 AI 工作汇报")
+        description_title.setStyleSheet("font-weight: bold; font-size: 13px; margin-bottom: 5px;")
+        description_layout.addWidget(description_title)
+
+        # 先创建一个临时的 QTextEdit 来获取字体度量
+        temp_text_edit = QTextEdit()
+        font_metrics = temp_text_edit.fontMetrics()
+
+        # AI 工作汇报内容 - 可滚动的文本区域
+        self.description_text = QTextEdit()
+        self.description_text.setPlainText(self.prompt)
+        self.description_text.setReadOnly(True)  # 设为只读
+        self.description_text.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.description_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.description_text.setLineWrapMode(QTextEdit.WidgetWidth)
+        self.description_text.setStyleSheet(self._get_themed_button_style('description'))
+        description_layout.addWidget(self.description_text)
+        
+        # 下半部分：用户输入区域
+        self.input_widget = QWidget()
+        input_layout = QVBoxLayout(self.input_widget)
+        input_layout.setContentsMargins(5, 5, 5, 5)
+        
+        input_title = QLabel("✏️ 您的文字反馈（可选）")
+        input_title.setStyleSheet("font-weight: bold; font-size: 13px; margin-bottom: 5px;")
+        input_layout.addWidget(input_title)
 
         self.feedback_text = FeedbackTextEdit()
         font_metrics = self.feedback_text.fontMetrics()
         row_height = font_metrics.height()
-        # Calculate height for 5 lines + some padding for margins
+        # Calculate height for 6 lines + some padding for margins
         padding = self.feedback_text.contentsMargins().top() + self.feedback_text.contentsMargins().bottom() + 5
-        self.feedback_text.setMinimumHeight(5 * row_height + padding)
-
+        self.feedback_text.setMinimumHeight(6 * row_height + padding)
+        # 移除最大高度限制，让分割器控制高度
+        # self.feedback_text.setMaximumHeight(12 * row_height + padding)
+        # 确保垂直滚动条在需要时显示
+        self.feedback_text.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.feedback_text.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        # 启用自动换行
+        self.feedback_text.setLineWrapMode(QTextEdit.WidgetWidth)
+        # 确保文本框可以接收焦点和滚轮事件
+        self.feedback_text.setFocusPolicy(Qt.WheelFocus)
+        # 设置文本框为可编辑状态
+        self.feedback_text.setReadOnly(False)
         self.feedback_text.setPlaceholderText("请在此输入您的反馈、建议或问题...")
+        input_layout.addWidget(self.feedback_text)
+        
         submit_button = QPushButton("✅ 提交反馈 (Ctrl+Enter)")
         submit_button.setStyleSheet(self._get_themed_button_style('submit'))
         submit_button.clicked.connect(self._submit_feedback)
+        input_layout.addWidget(submit_button)
 
-        feedback_layout.addWidget(self.feedback_text)
-        feedback_layout.addWidget(submit_button)
+        # 将两个区域添加到分割器
+        self.feedback_splitter.addWidget(self.description_widget)
+        self.feedback_splitter.addWidget(self.input_widget)
+        
+        # 设置初始比例（上半部分占 40%，下半部分占 60%）
+        self.feedback_splitter.setSizes([200, 300])
+        
+        # 从设置中恢复分割器状态
+        self.settings.beginGroup(self.project_group_name)
+        splitter_state = self.settings.value("splitterState")
+        if splitter_state:
+            self.feedback_splitter.restoreState(splitter_state)
+        self.settings.endGroup()
+        
+        # 设置分割器的样式
+        self.feedback_splitter.setHandleWidth(3)  # 根据用户反馈调整为 3px
+        
+        # 设置分割器的拖拽策略，使其更敏感
+        self.feedback_splitter.setChildrenCollapsible(False)  # 防止子组件被完全折叠
+        self.feedback_splitter.setOpaqueResize(True)  # 实时调整大小
+        
+        # 设置最小尺寸以确保两个区域都可见
+        self.description_widget.setMinimumHeight(100)
+        self.input_widget.setMinimumHeight(150)
+        
+        # 添加分割器到主布局
+        feedback_main_layout.addWidget(self.feedback_splitter)
 
         # 图片反馈区域（可选，支持多张）
         image_group = QGroupBox("🖼 图片反馈（可选，支持多张）")
@@ -927,7 +1140,8 @@ class FeedbackUI(QMainWindow):
         # 图片显示区域
         self.image_scroll_area = QScrollArea()
         self.image_scroll_area.setWidgetResizable(True)
-        self.image_scroll_area.setMinimumHeight(150)
+        self.image_scroll_area.setMinimumHeight(80)   # 从 100 减少到 80
+        self.image_scroll_area.setMaximumHeight(90)   # 从 120 减少到 90
         
         self.image_container = QWidget()
         self.image_container_layout = QHBoxLayout(self.image_container)
@@ -942,13 +1156,13 @@ class FeedbackUI(QMainWindow):
             no_image_style = """
                 color: #a0a0a0;
                 font-size: 14px;
-                padding: 40px;
+                padding: 10px;
             """
         else:
             no_image_style = """
                 color: #6c757d;
                 font-size: 14px;
-                padding: 40px;
+                padding: 10px;
             """
         self.no_image_label.setStyleSheet(no_image_style)
         self.image_container_layout.addWidget(self.no_image_label)
@@ -956,25 +1170,10 @@ class FeedbackUI(QMainWindow):
         self.image_scroll_area.setWidget(self.image_container)
         image_layout.addWidget(self.image_scroll_area)
         
-        feedback_layout.addWidget(image_group)
-
-        # 操作按钮区域
-        action_layout = QHBoxLayout()
-        action_layout.setSpacing(15)
-        
-        confirm_button = QPushButton("✅ 确认")
-        confirm_button.setStyleSheet(self._get_themed_button_style('save'))
-        
-        cancel_button = QPushButton("❌ 取消")
-        cancel_button.setStyleSheet(self._get_themed_button_style('danger'))
-        
-        action_layout.addStretch()
-        action_layout.addWidget(confirm_button)
-        action_layout.addWidget(cancel_button)
-        feedback_layout.addLayout(action_layout)
+        feedback_main_layout.addWidget(image_group)
 
         # Set minimum height for feedback_group to accommodate its contents
-        self.feedback_group.setMinimumHeight(500)
+        self.feedback_group.setMinimumHeight(450)  # 从 500 减少到 450
 
         # Add widgets in a specific order
         layout.addWidget(self.feedback_group)
@@ -1019,6 +1218,8 @@ class FeedbackUI(QMainWindow):
         # Immediately save the visibility state for this project
         self.settings.beginGroup(self.project_group_name)
         self.settings.setValue("commandSectionVisible", self.command_group.isVisible())
+        # 保存分割器状态
+        self.settings.setValue("splitterState", self.feedback_splitter.saveState())
         self.settings.endGroup()
 
         # Adjust window height only
@@ -1030,6 +1231,25 @@ class FeedbackUI(QMainWindow):
 
         current_width = self.width()
         self.resize(current_width, new_height)
+
+    def _toggle_stay_on_top(self):
+        """切换窗口置顶状态"""
+        is_checked = self.stay_on_top_check.isChecked()
+        
+        if is_checked:
+            # 启用置顶
+            self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
+        else:
+            # 禁用置顶
+            self.setWindowFlags(self.windowFlags() & ~Qt.WindowStaysOnTopHint)
+        
+        # 重新显示窗口以应用新的标志
+        self.show()
+        
+        # 保存置顶设置到配置中
+        self.settings.beginGroup("MainWindow_General")
+        self.settings.setValue("stayOnTop", is_checked)
+        self.settings.endGroup()
 
     def _update_config(self):
         self.config["run_command"] = self.command_entry.text()
@@ -1160,6 +1380,7 @@ class FeedbackUI(QMainWindow):
         if not pixmap.isNull():
             # 保存临时图片文件
             import tempfile
+            # 使用 delete=False 确保文件不会被自动删除
             temp_file = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
             temp_path = temp_file.name
             temp_file.close()
@@ -1168,6 +1389,7 @@ class FeedbackUI(QMainWindow):
                 if temp_path not in self.selected_images:
                     self.selected_images.append(temp_path)
                 self._update_image_display()
+                self._append_log(f"已从剪贴板添加图片: {temp_path}\n")
             else:
                 self._append_log("保存剪贴板图片失败。\n")
         else:
@@ -1176,13 +1398,7 @@ class FeedbackUI(QMainWindow):
     def _clear_images(self):
         """清空所有选择的图片"""
         # 清理临时文件
-        import tempfile
-        for image_path in self.selected_images:
-            if tempfile.gettempdir() in image_path:
-                try:
-                    os.remove(image_path)
-                except:
-                    pass
+        self._cleanup_temp_images()
         
         self.selected_images.clear()
         self._update_image_display()
@@ -1318,9 +1534,21 @@ class FeedbackUI(QMainWindow):
         # Save project-specific command section visibility (this is now slightly redundant due to immediate save in toggle, but harmless)
         self.settings.beginGroup(self.project_group_name)
         self.settings.setValue("commandSectionVisible", self.command_group.isVisible())
+        # 保存分割器状态
+        self.settings.setValue("splitterState", self.feedback_splitter.saveState())
         self.settings.endGroup()
 
-        # 清理临时图片文件
+        # 只有在没有提交反馈的情况下才清理临时图片文件
+        # 如果已经提交反馈，临时文件应该保留给 MCP 使用
+        if not self.feedback_result:
+            self._cleanup_temp_images()
+
+        if self.process:
+            kill_tree(self.process)
+        super().closeEvent(event)
+    
+    def _cleanup_temp_images(self):
+        """清理临时图片文件"""
         import tempfile
         for image_path in self.selected_images:
             if tempfile.gettempdir() in image_path:
@@ -1328,10 +1556,6 @@ class FeedbackUI(QMainWindow):
                     os.remove(image_path)
                 except:
                     pass
-
-        if self.process:
-            kill_tree(self.process)
-        super().closeEvent(event)
 
     def run(self) -> FeedbackResult:
         self.show()
