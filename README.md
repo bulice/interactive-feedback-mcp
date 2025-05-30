@@ -115,23 +115,16 @@ python server.py
 在 Cursor 的 MCP 配置文件中添加以下配置：
 
 ```json
-{
   "mcpServers": {
-    "interactive-feedback-mcp": {
-      "command": "uv",
-      "args": [
-        "--directory",
-        "/path/to/interactive-feedback-mcp",
-        "run",
-        "server.py"
-      ],
+"interactive-feedback-mcp": {
+      "command": "/Users/lee/tmp/interactive-feedback-mcp/mcp_server.sh",
+      "args": [],
       "timeout": 600,
       "autoApprove": [
         "interactive_feedback"
       ]
     }
   }
-}
 ```
 
 **注意**: 请将 `/path/to/interactive-feedback-mcp` 替换为实际的项目路径。
