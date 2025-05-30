@@ -8,9 +8,13 @@ import sys
 import subprocess
 import tempfile
 import json
+import base64
+from datetime import datetime
 from pathlib import Path
+from typing import List, Union
 
 from mcp.server.fastmcp import FastMCP
+from mcp.types import TextContent, ImageContent
 
 # 创建MCP服务器
 mcp = FastMCP(
@@ -20,7 +24,7 @@ mcp = FastMCP(
 
 
 @mcp.tool()
-def interactive_feedback(project_directory: str = "", summary: str = "", theme: str = "light") -> str:
+def interactive_feedback(project_directory: str = "", summary: str = "", theme: str = "light") -> List[Union[TextContent, ImageContent]]:
     """
     启动交互式反馈界面，收集用户的文字和图片反馈。
     使用PySide6界面，支持明亮和暗黑主题。
@@ -31,7 +35,7 @@ def interactive_feedback(project_directory: str = "", summary: str = "", theme: 
         theme: 界面主题，'light'(明亮)或'dark'(暗黑)，默认明亮主题
         
     Returns:
-        包含用户反馈内容的JSON字符串
+        包含用户反馈内容的列表，可能包含文本和图片内容对象
     """
     try:
         # 如果没有指定项目目录，使用当前工作目录
@@ -67,22 +71,82 @@ def interactive_feedback(project_directory: str = "", summary: str = "", theme: 
             # 检查是否成功创建了输出文件
             if os.path.exists(temp_output):
                 with open(temp_output, 'r', encoding='utf-8') as f:
-                    feedback_data = json.load(f)
+                    feedback_result = json.load(f)
                     
                 # 清理临时文件
                 os.unlink(temp_output)
                 
-                # 返回反馈数据
-                return json.dumps(feedback_data, ensure_ascii=False, indent=2)
+                # 解析反馈内容
+                interactive_feedback_str = feedback_result.get('interactive_feedback', '{}')
+                try:
+                    feedback_data = json.loads(interactive_feedback_str)
+                except json.JSONDecodeError:
+                    feedback_data = {}
+                
+                # 构建返回内容列表
+                feedback_items = []
+                
+                # 获取当前时间戳
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                
+                # 添加文字反馈
+                text_feedback = feedback_data.get('text_feedback', '').strip()
+                if text_feedback:
+                    feedback_items.append(TextContent(
+                        type="text",
+                        text=f"用户文字反馈：{text_feedback}\n提交时间：{timestamp}"
+                    ))
+                
+                # 添加图片反馈
+                images = feedback_data.get('images', [])
+                if images:
+                    for image_path in images:
+                        try:
+                            if os.path.exists(image_path):
+                                # 读取图片文件
+                                with open(image_path, 'rb') as img_file:
+                                    image_data = img_file.read()
+                                
+                                # 将图片数据编码为 base64
+                                base64_data = base64.b64encode(image_data).decode('utf-8')
+                                
+                                # 根据文件扩展名确定格式
+                                file_ext = Path(image_path).suffix.lower()
+                                if file_ext in ['.jpg', '.jpeg']:
+                                    media_type = 'image/jpeg'
+                                elif file_ext == '.png':
+                                    media_type = 'image/png'
+                                elif file_ext == '.gif':
+                                    media_type = 'image/gif'
+                                elif file_ext in ['.bmp']:
+                                    media_type = 'image/bmp'
+                                else:
+                                    media_type = 'image/png'  # 默认为 PNG
+                                
+                                feedback_items.append(ImageContent(
+                                    type="image",
+                                    data=base64_data,
+                                    mimeType=media_type
+                                ))
+                                
+                        except Exception as e:
+                            # 如果图片读取失败，添加错误信息
+                            feedback_items.append(TextContent(
+                                type="text",
+                                text=f"图片加载失败 ({os.path.basename(image_path)}): {str(e)}"
+                            ))
+                
+                # 如果没有任何反馈内容，添加默认信息
+                if not feedback_items:
+                    feedback_items.append(TextContent(
+                        type="text",
+                        text=f"用户未提供反馈内容\n提交时间：{timestamp}"
+                    ))
+                
+                return feedback_items
             else:
                 # 如果没有输出文件，表示用户可能取消了
-                return json.dumps({
-                    "command_logs": "",
-                    "interactive_feedback": json.dumps({
-                        "text_feedback": "",
-                        "images": []
-                    }, ensure_ascii=False)
-                }, ensure_ascii=False, indent=2)
+                return []
                 
         except subprocess.TimeoutExpired:
             # 清理临时文件
@@ -97,14 +161,7 @@ def interactive_feedback(project_directory: str = "", summary: str = "", theme: 
             raise Exception(f"启动反馈界面失败: {str(e)}")
             
     except Exception as e:
-        return json.dumps({
-            "error": f"interactive_feedback工具执行失败: {str(e)}",
-            "command_logs": "",
-            "interactive_feedback": json.dumps({
-                "text_feedback": "",
-                "images": []
-            }, ensure_ascii=False)
-        }, ensure_ascii=False, indent=2)
+        return []
 
 
 @mcp.tool()
